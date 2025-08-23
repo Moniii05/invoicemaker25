@@ -8,8 +8,12 @@
 **/build/
 **/*.pdf
 **/*.db
+**/*.zip
 
 # IDE (Eclipse)
 **/.classpath
 **/.project
 **/.settings/
+
+# Stray Typst-Template auf Projektebene (die richtige liegt unter src/main/resources)
+invoicemaker/main.typ
