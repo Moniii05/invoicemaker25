@@ -1,113 +1,86 @@
 package com.meinunternehmen.invoicemaker;
 
-import java.awt.Desktop;
-import java.io.File;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.nio.file.*;
+import java.util.*;
 
 public class TypstGenerator {
-    /**
-     * Kompiliert aus einer .typ–Ressource eine PDF.
-     *
-     * @param templateResource  Name der .typ–Datei in src/main/resources (z.B. "main.typ")
-     * @param data              Map mit Template-Variablen
-     * @param outputPdf         Pfad zur Ausgabedatei (z.B. Path.of("invoice.pdf"))
-     */
-    public static void generate(String templateResource,
-                                Map<String, Object> data,
-                                Path outputPdf) throws Exception {
-        // 1) Build-Ordner anlegen
-        Path buildDir = Path.of("build");
-        Files.createDirectories(buildDir);
 
-        // 2) Haupt-Template einlesen
-        String tpl;
-        try (InputStream in = TypstGenerator.class.getResourceAsStream("/" + templateResource)) {
-            if (in == null) throw new RuntimeException("Resource nicht gefunden: /" + templateResource);
-            tpl = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
+  public static void generateJson(String json) {
+    try {
+      Path projectRoot = Paths.get("").toAbsolutePath();
+      Path buildDir    = projectRoot.resolve("build");
+      Files.createDirectories(buildDir);
 
-        // 3) invoice-maker.typ & banner.png kopieren
-        try (InputStream in = TypstGenerator.class.getResourceAsStream("/invoice-maker.typ")) {
-            if (in == null) throw new RuntimeException("Resource nicht gefunden: /invoice-maker.typ");
-            Files.copy(in, buildDir.resolve("invoice-maker.typ"), StandardCopyOption.REPLACE_EXISTING);
-        }
-        try (InputStream in = TypstGenerator.class.getResourceAsStream("/banner.png")) {
-            if (in != null) {
-                Files.copy(in, buildDir.resolve("banner.png"), StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
+      // 1) JSON neben main.typ in build/ schreiben
+      Path dataJson = buildDir.resolve("data.json");
+      try (BufferedWriter w = Files.newBufferedWriter(dataJson, StandardCharsets.UTF_8)) {
+        w.write(json);
+      }
 
-        // 4) Daten-Map in Typst-Literal umwandeln
-        String dataLiteral = toTypstLiteral(data);
+      // 2) main.typ aus resources nach build/ kopieren
+      copyResourceTo("main.typ", buildDir.resolve("main.typ"));
+      
+      copyOptionalResourceTo("banner.png", buildDir.resolve("banner.png"));
 
-        // 5) Generiertes Typst-File schreiben
-        Path gen = buildDir.resolve("generated_main.typ");
-        String combined = "#let data = " + dataLiteral + "\n\n" + tpl;
-        Files.writeString(gen, combined, StandardCharsets.UTF_8);
+      // 3) Typst aufrufen: Arbeitsverzeichnis = build/
+      String typstCmd = findTypstBinary();
+      List<String> cmd = List.of(
+          typstCmd, "compile",
+          "main.typ",                                  // Template relativ zu build/
+          projectRoot.resolve("invoice.pdf").toString()// Ausgabe absolut
+      );
+      ProcessBuilder pb = new ProcessBuilder(cmd);
+      pb.directory(buildDir.toFile());                 // <- wichtig!
+      pb.redirectErrorStream(true);
 
-        // Debug
-        System.out.println("Working dir: " + System.getProperty("user.dir"));
-        System.out.println("Compile-Template: " + gen);
-        System.out.println("Output-PDF:       " + outputPdf.toAbsolutePath());
+      Process p = pb.start();
+      StringBuilder log = new StringBuilder();
+      try (BufferedReader r = new BufferedReader(
+              new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = r.readLine()) != null) log.append(line).append(System.lineSeparator());
+      }
+      int code = p.waitFor();
+      if (code != 0) throw new RuntimeException("Typst-Compile fehlgeschlagen (Exit " + code + ")\n" + log);
 
-        // 6) Typst im Build-Ordner ausführen
-        Process p = new ProcessBuilder(
-               // "/opt/homebrew/bin/typst",  // oder einfach "typst" im PATH
-        		// "typst", 
-        		"/Users/monikapham/.cargo/bin/typst",
-        		"compile",
-                gen.getFileName().toString(),
-                outputPdf.toString()
-            )
-            .directory(buildDir.toFile())
-            .inheritIO()
-            .start();
-
-        if (p.waitFor() != 0) {
-            throw new RuntimeException("Typst-Compile fehlgeschlagen mit Code " + p.exitValue());
-        }
-
-        // 7) PDF öffnen
-        File pdfFile = outputPdf.toFile();
-        if (Desktop.isDesktopSupported()) {
-            Desktop.getDesktop().open(pdfFile);
-        }
+      System.out.println("[Typst] OK → " + projectRoot.resolve("invoice.pdf"));
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
     }
+  }
 
-   
-    private static String toTypstLiteral(Object obj) {
-        if (obj instanceof Map<?, ?> m) {
-            String entries = m.entrySet().stream()
-                .map(e -> {
-                    String key = e.getKey().toString();
-                    // wenn der Key ein einfacher Identifier ist, unquoted,
-                    // sonst backtick-quoted
-                    String keyLit = key.matches("[A-Za-z_][A-Za-z0-9_]*")
-                            ? key
-                            : "\"" + key + "\"";
-                    return keyLit + ": " + toTypstLiteral(e.getValue());
-                })
-                .collect(Collectors.joining(", "));
-            return "( " + entries + " )";
-        }
-        if (obj instanceof List<?> list) {
-            String items = list.stream()
-                .map(TypstGenerator::toTypstLiteral)
-                .collect(Collectors.joining(", "));
-            return "[ " + items + " ]";
-        }
-        if (obj instanceof String s) {
-            return "\"" + s.replace("\"", "\\\"") + "\"";
-        }
-        // für Zahlen/Booleans:
-        return obj.toString();
+  private static void copyResourceTo(String resourceName, Path target) throws IOException {
+    try (InputStream in = TypstGenerator.class.getResourceAsStream("/" + resourceName)) {
+      if (in == null) throw new FileNotFoundException("Resource not found: " + resourceName);
+      Files.createDirectories(target.getParent());
+      Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
     }
+  }
+  
+  
+  private static void copyOptionalResourceTo(String resourceName, Path target) {
+	    try (InputStream in = TypstGenerator.class.getResourceAsStream("/" + resourceName)) {
+	      if (in == null) return; // optional
+	      Files.createDirectories(target.getParent());
+	      Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+	    } catch (IOException e) {
+	      System.err.println("[Typst] Hinweis: Optionale Resource nicht kopiert: " + resourceName + " → " + e.getMessage());
+	    }
+	  }
+
+  // wie gehabt: nutzt vollen Pfad /opt/homebrew/bin/typst, wenn vorhanden
+  private static String findTypstBinary() {
+    String env = System.getenv("TYPST_BIN");
+    if (env != null && !env.isBlank() && Files.isExecutable(Path.of(env))) return env;
+    String[] candidates = {
+      "/opt/homebrew/bin/typst",
+      "/usr/local/bin/typst",
+      "/usr/bin/typst"
+    };
+    for (String c : candidates) if (Files.isExecutable(Path.of(c))) return c;
+    return "typst";
+  }
 }
 
