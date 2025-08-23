@@ -1,0 +1,15 @@
+# OS
+.DS_Store
+
+# Maven/Java Build
+**/target/
+
+# Eigene Build-Ausgaben
+**/build/
+**/*.pdf
+**/*.db
+
+# IDE (Eclipse)
+**/.classpath
+**/.project
+**/.settings/
