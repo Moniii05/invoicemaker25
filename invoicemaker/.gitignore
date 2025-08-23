@@ -1,1 +1,14 @@
 /target/
+# OS
+.DS_Store
+
+# Build/Output
+/build/
+/target/
+*.pdf
+*.db
+
+# IDE (Eclipse)
+.classpath
+.project
+.settings/
