@@ -22,7 +22,8 @@ public class TypstGenerator {
       // 2) main.typ aus resources nach build/ kopieren
       copyResourceTo("main.typ", buildDir.resolve("main.typ"));
       
-      copyOptionalResourceTo("banner.png", buildDir.resolve("banner.png"));
+      copyOptionalResourceTo("invoice-maker.typ", buildDir.resolve("invoice-maker.typ"));
+
 
       // 3) Typst aufrufen: Arbeitsverzeichnis = build/
       String typstCmd = findTypstBinary();
