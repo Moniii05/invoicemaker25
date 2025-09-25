@@ -1,8 +1,9 @@
 package com.meinunternehmen.invoicemaker;
 
-import javafx.collections.ListChangeListener;
+//import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 import javafx.util.StringConverter;
 import javafx.util.converter.DefaultStringConverter;
 import javafx.util.converter.NumberStringConverter;
@@ -10,17 +11,28 @@ import javafx.util.converter.NumberStringConverter;
 import java.sql.*;
 import java.time.LocalDate;
 
+import javafx.scene.Node;
+
+import org.json.JSONObject;
+import org.json.JSONArray;
+
+import javafx.scene.control.cell.TextFieldTableCell;
+
+/*import java.io.IOException;
+import java.nio.file.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern; */
+
+
 public class LayoutController {
 
     @FXML private ComboBox<Customer> customerCombo;
     @FXML private TextField kundenNummerField;
 
-    // Adress-Felder (Empfänger)
     @FXML private TextField streetField;
     @FXML private TextField postalCodeField;
     @FXML private TextField cityField;
 
-    // Positionstabelle
     @FXML private TableView<InvoiceLine> leistungenTable;
     @FXML private TableColumn<InvoiceLine, Integer> colNummer;
     @FXML private TableColumn<InvoiceLine, String>  colDescription;
@@ -28,282 +40,345 @@ public class LayoutController {
     @FXML private TableColumn<InvoiceLine, Number>  colPrice;
     @FXML private TableColumn<InvoiceLine, Number>  colTotal;
 
-    // Rechnungsdaten
-    @FXML private DatePicker dpIssue, dpDelivery, dpDue;
+    @FXML private DatePicker DateIssued, DateDelivered, DateDue;
     @FXML private TextField rechnungsNummerField;
 
+    private Database db;
+    public void setDatabase(Database db) { this.db = db; }
+
     @FXML
-    public void initialize() throws SQLException {
-        // --- 0) Rechnungsnummer & ComboBox ---
+    public void initialize() {
         rechnungsNummerField.setEditable(true);
-        rechnungsNummerField.setText(generateNextInvoiceNumber());
+
         customerCombo.setEditable(true);
 
-        // --- 1) StringConverter für ComboBox<Customer> ---
         customerCombo.setConverter(new StringConverter<>() {
-            @Override public String toString(Customer c) {
-                return c == null ? "" : c.getName();
+            @Override public String toString(Customer customer) {
+            return customer == null ? "" : customer.getName(); 
             }
+            
+            
             @Override public Customer fromString(String text) {
-                for (Customer c : customerCombo.getItems()) {
-                    if (c.getName().equals(text)) return c;
+               for (Customer existing : customerCombo.getItems()) {
+                    if (existing.getName().equals(text)) return existing;
                 }
                 return new Customer(0, text, "", "", "", "");
             }
         });
 
-        // --- 2) Wenn Editor-Focus verloren, Felder füllen ---
-        customerCombo.getEditor().focusedProperty().addListener((obs, wasFoc, isNowFoc) -> {
-            if (!isNowFoc) {
-                Customer sel = customerCombo.getConverter()
+        // fokus weg --> felder füllen/leeren
+        customerCombo.getEditor().focusedProperty().addListener((ignored, notUsed, isFocused) -> {
+            if (!isFocused) {
+                Customer selected = customerCombo.getConverter()
                         .fromString(customerCombo.getEditor().getText().trim());
-                customerCombo.setValue(sel);
-                if (sel.getId() > 0) {
-                    kundenNummerField.setText(String.valueOf(sel.getId()));
-                    streetField.setText(sel.getStreet());
-                    postalCodeField.setText(sel.getZip());
-                    cityField.setText(sel.getCity());
+                customerCombo.setValue(selected);
+                if (selected.getId() > 0) {
+                    kundenNummerField.setText(String.valueOf(selected.getId()));
+                    streetField.setText(selected.getStreet());
+                    postalCodeField.setText(selected.getPostalCode());
+                    cityField.setText(selected.getCity());
+                } else {
+                    kundenNummerField.clear();
+                    streetField.clear();
+                    postalCodeField.clear();
+                    cityField.clear();
                 }
             }
         });
 
-        // --- 3) Kunden aus DB nachladen ---
-        try (Connection c = Database.getConnection();
-             Statement s = c.createStatement();
-             ResultSet rs = s.executeQuery("SELECT * FROM customer")) {
-            while (rs.next()) {
-                customerCombo.getItems().add(new Customer(
-                        rs.getInt("id"),
-                        rs.getString("name"),
-                        rs.getString("street"),
-                        rs.getString("city"),
-                        rs.getString("zip"),
-                        rs.getString("vat_id")
-                ));
-            }
-        }
+        // Tabelle 
+        colNummer.setCellValueFactory(cell -> cell.getValue().lineNumberProperty().asObject()); // asObject für primitive unt/double
 
-        // --- 4) Tabelle konfigurieren ---
-        colNummer.setCellValueFactory(c -> c.getValue().numberProperty().asObject());
-
-        colDescription.setCellValueFactory(c -> c.getValue().descriptionProperty());
-        colDescription.setCellFactory(tc -> new EditingCell<>(new DefaultStringConverter()));
-        colDescription.setOnEditCommit(evt -> {
-            evt.getRowValue().setDescription(evt.getNewValue());
-            leistungenTable.refresh();
+      //  colDescription.setCellValueFactory(cell -> cell.getValue().descriptionProperty());
+       // colDescription.setCellFactory(column -> new EditingCell<>(new DefaultStringConverter()));
+      //  colDescription.setOnEditCommit(event -> {
+       //     event.getRowValue().setDescription(event.getNewValue());
+       //     leistungenTable.refresh();
+            
+            colDescription.setCellValueFactory(cell -> cell.getValue().descriptionProperty());
+            colDescription.setCellFactory(TextFieldTableCell.forTableColumn(new DefaultStringConverter()));
+            colDescription.setOnEditCommit(evt -> {
+                evt.getRowValue().setDescription(evt.getNewValue());
         });
 
-        colQuantity.setCellValueFactory(c -> c.getValue().quantityProperty());
-        colQuantity.setCellFactory(tc -> new EditingCell<>(new NumberStringConverter()));
-        colQuantity.setOnEditCommit(evt -> {
-            evt.getRowValue().setQuantity(evt.getNewValue().doubleValue());
-            recalcTotals();
+            colQuantity.setCellValueFactory(cell -> cell.getValue().quantityProperty());
+            colQuantity.setCellFactory(TextFieldTableCell.forTableColumn(new NumberStringConverter()));
+            colQuantity.setOnEditCommit(evt -> {
+                // newValue = (double), weil erwartet int eigentlcih:
+                evt.getRowValue().setQuantity(evt.getNewValue().doubleValue());
+           
         });
 
-        colPrice.setCellValueFactory(c -> c.getValue().priceProperty());
-        colPrice.setCellFactory(tc -> new EditingCell<>(new NumberStringConverter()));
-        colPrice.setOnEditCommit(evt -> {
-            evt.getRowValue().setPrice(evt.getNewValue().doubleValue());
-            recalcTotals();
+            colPrice.setCellValueFactory(cell -> cell.getValue().unitPriceProperty());
+            colPrice.setCellFactory(TextFieldTableCell.forTableColumn(new NumberStringConverter()));
+            colPrice.setOnEditCommit(evt -> {
+                evt.getRowValue().setUnitPrice(evt.getNewValue().doubleValue());
+           
         });
 
-        colTotal.setCellValueFactory(c -> c.getValue().totalProperty());
+        colTotal.setCellValueFactory(cell -> cell.getValue().lineTotalProperty());
 
         leistungenTable.setEditable(true);
-        leistungenTable.getItems().addListener((ListChangeListener<InvoiceLine>) change -> recalcTotals());
+      // leistungenTable.getItems().addListener(
+       //         (ListChangeListener<InvoiceLine>) change -> recalcTotals());
+
         leistungenTable.getItems().add(new InvoiceLine(1, "", 1, 0.0));
 
-        // --- 5) Datums-Defaults setzen ---
+     
         LocalDate today = LocalDate.now();
-        dpIssue.setValue(today);
-        dpDelivery.setValue(today);
-        dpDue.setValue(today.plusDays(14));
+        DateIssued.setValue(today);
+        DateDelivered.setValue(today);
+        DateDue.setValue(today.plusDays(14));
+    }
+
+    // lädt kunde + vergibt ReNr
+    public void loadRecipientData() {
+        customerCombo.getItems().clear(); // clear ListenMethode um Duplikate verhindern
+        try (Connection DBconn = db.openConnection();
+             Statement stmt = DBconn.createStatement();
+             ResultSet results = stmt.executeQuery("""
+                     SELECT id, name, street, city, postal_code
+                     FROM customer
+                     ORDER BY name
+                 """)) {
+            while (results.next()) { // next = JDBC
+                customerCombo.getItems().add(new Customer(
+                        results.getInt("id"),
+                        results.getString("name"),
+                        results.getString("street"),
+                        results.getString("city"),
+                        results.getString("postal_code"),
+                        "" // vatId
+                ));   }
+        } catch (SQLException ex) {
+            showError("Fehler beim Laden der Kunden", ex);   
+            }
+        
+        rechnungsNummerField.setText("Re0001");
+
+        /* ReNR vorschlagen
+        try {
+            rechnungsNummerField.setText(generateNextInvoiceNumber());
+        } catch (SQLException ex) {
+            rechnungsNummerField.setText("Re0001"); // JavaFX
+        } */
     }
 
     @FXML
     private void onNewCustomer() {
-        // ggf. Dialog zum Anlegen eines Kunden
+        Dialog<Customer> customerDialog = new Dialog<>();
+        customerDialog.setTitle("Neuen Kunden anlegen");
+        customerDialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        TextField nameInput       = new TextField();
+        TextField streetInput     = new TextField();
+        TextField postalCodeInput = new TextField();
+        TextField cityInput       = new TextField();
+
+        GridPane formGrid = new GridPane();
+        formGrid.setHgap(8);
+        formGrid.setVgap(6);
+        formGrid.addRow(0, new Label("Name*:"),  nameInput);
+        formGrid.addRow(1, new Label("Straße:"), streetInput);
+        formGrid.addRow(2, new Label("PLZ:"),    postalCodeInput);
+        formGrid.addRow(3, new Label("Stadt:"),  cityInput);
+        customerDialog.getDialogPane().setContent(formGrid);
+
+        Node okButton = customerDialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.setDisable(true); //von node
+
+        nameInput.textProperty().addListener((ignoredObs, ignoredOld, newText) ->
+                okButton.setDisable(newText.trim().isEmpty())
+        );
+
+        customerDialog.setResultConverter(clicked -> {
+            if (clicked == ButtonType.OK) {
+                return new Customer(
+                        0,                             
+                        nameInput.getText().trim(),
+                        streetInput.getText().trim(),
+                        cityInput.getText().trim(),
+                        postalCodeInput.getText().trim(),
+                        ""             
+                        ); }
+            return null;
+        });
+
+        Customer created = customerDialog.showAndWait().orElse(null); // show von dialog 
+        if (created == null) return;
+
+        try (Connection conn = db.openConnection();
+             PreparedStatement ps = conn.prepareStatement("""
+                 INSERT INTO customer (name, street, city, postal_code)
+                 VALUES (?, ?, ?, ?)
+             """, Statement.RETURN_GENERATED_KEYS)) {
+
+            ps.setString(1, created.getName());
+            ps.setString(2, created.getStreet());
+            ps.setString(3, created.getCity());
+            ps.setString(4, created.getPostalCode());
+            ps.executeUpdate();
+
+            int generatedId = 0; 
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                generatedId = keys.next() ? keys.getInt(1) : 0;
+                
+            }
+
+            Customer saved = new Customer(
+                    generatedId,
+                    created.getName(),
+                    created.getStreet(),
+                    created.getCity(),
+                    created.getPostalCode(),
+                    ""   );
+
+            customerCombo.getItems().add(saved); 
+            customerCombo.setValue(saved);
+
+            kundenNummerField.setText(String.valueOf(generatedId));
+            streetField.setText(saved.getStreet());      
+            postalCodeField.setText(saved.getPostalCode());
+            cityField.setText(saved.getCity());
+
+        } catch (SQLException ex) {
+            showError("Kunde konnte nicht gespeichert werden", ex);
+        }
     }
+
 
     @FXML
     private void onAddRow() {
         if (leistungenTable.getEditingCell() != null) {
             leistungenTable.edit(-1, null);
         }
-        int next = leistungenTable.getItems().size() + 1;
-        leistungenTable.getItems().add(new InvoiceLine(next, "", 1, 0.0));
-        leistungenTable.scrollTo(next - 1);
+        int nextRowNumber = leistungenTable.getItems().size() + 1;
+        
+        leistungenTable.getItems().add(new InvoiceLine(nextRowNumber, "", 1, 0.0));
+        
+        leistungenTable.scrollTo(nextRowNumber - 1);
     }
 
-    
+    @FXML
+    private void onDeleteRow() {
+        InvoiceLine selectedRow = leistungenTable.getSelectionModel().getSelectedItem();
+        if (selectedRow == null) return;
+
+        Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION,
+                "Ausgewählte Zeile wirklich löschen?",
+                ButtonType.OK, ButtonType.CANCEL);
+
+        ButtonType clicked = confirmDialog.showAndWait().orElse(ButtonType.CANCEL);
+        if (clicked != ButtonType.OK) return;
+
+        leistungenTable.getItems().remove(selectedRow);
+
+        // nummern neu vergeben
+        for (int i = 0; i < leistungenTable.getItems().size(); i++) {
+            leistungenTable.getItems().get(i).setLineNumber(i + 1);
+        }
+      //  recalcTotals();
+    }
+
     
     @FXML
     private void onPdfErzeugen() {
-        // --- Rechnungs-/Kopfwerte abholen ---
+       // String invoiceId = rechnungsNummerField.getText();
         String invoiceId = rechnungsNummerField.getText();
-        String issue     = (dpIssue.getValue()    != null) ? dpIssue.getValue().toString()    : null;
-        String delivery  = (dpDelivery.getValue() != null) ? dpDelivery.getValue().toString() : null;
-        String due       = (dpDue.getValue()      != null) ? dpDue.getValue().toString()      : null;
 
-        String customerId = kundenNummerField.getText();
+        
+        String issued     = (DateIssued.getValue()    != null) ? DateIssued.getValue().toString()    : null;
+        String delivered  = (DateDelivered.getValue() != null) ? DateDelivered.getValue().toString() : null;
+        String due       = (DateDue.getValue()       != null) ? DateDue.getValue().toString()       : null;
 
-        // --- Absender (Biller) festlegen (später gern aus GUI/Config laden) ---
-        String billerVatRaw = "DE123456789";
-        String billerVat    = sanitizeVat(billerVatRaw, "DE");
-        String billerPrefix = countryPrefix(billerVat, "DE"); // z.B. "DE"
+        String customerId   = kundenNummerField.getText();
+        String billerVatId  = "DE123456789"; 
+        String recipientName = (customerCombo.getValue() != null) ? orEmpty(customerCombo.getValue().getName()) : orEmpty(customerCombo.getEditor().getText());
+        String recipientVat  = "DE"; // typst
 
-        // --- Empfängername + Empfänger-USt-ID (kann leer sein) ---
-        String recipientName = (customerCombo.getValue() != null)
-                ? nvl(customerCombo.getValue().getName())
-                : nvl(customerCombo.getEditor().getText());
-        String recipientVatRaw = (customerCombo.getValue() != null)
-                ? nvl(customerCombo.getValue().getVatId())
-                : "";
-
-        // Sanitisieren: min. Länderpräfix damit Typst nicht bei slice(0,2) crasht
-        String recipientVat = sanitizeVat(recipientVatRaw, billerPrefix);
-
-        // --- EIN Datum für alle Positionen: Delivery > Issue > Heute ---
-        String rowDate = (dpDelivery.getValue() != null ? dpDelivery.getValue()
-                : (dpIssue.getValue() != null ? dpIssue.getValue()
-                : java.time.LocalDate.now())).toString(); // "YYYY-MM-DD"
-
-        // --- Items als JSON ---
-        StringBuilder itemsSb = new StringBuilder();
-        for (int i = 0; i < leistungenTable.getItems().size(); i++) {
-            InvoiceLine ln = leistungenTable.getItems().get(i);
-            if (i > 0) itemsSb.append(',');
-            itemsSb.append("{")
-                  .append("\"date\":\"").append(esc(rowDate)).append("\",")
-                  .append("\"description\":\"").append(esc(nvl(ln.getDescription()))).append("\",")
-                  .append("\"quantity\":").append(ln.getQuantity()).append(",")
-                  .append("\"dur-min\":").append(0).append(",") // keine Zeitabrechnung
-                  .append("\"price\":").append(ln.getPrice())
-                  .append("}");
+      // weiß noch nicht wie viele row es gibt 
+        JSONArray items = new JSONArray();
+        for (InvoiceLine line : leistungenTable.getItems()) {
+            JSONObject item = new JSONObject()
+                    .put("description", orEmpty(line.getDescription()))
+                    .put("quantity", line.getQuantity())
+                    .put("price",    line.getUnitPrice());
+            items.put(item);
         }
-        String itemsJson = itemsSb.toString();
 
-        // --- Gesamtes JSON-Dokument bauen (ohne externe Lib) ---
-        StringBuilder json = new StringBuilder(2048);
-        json.append("{");
-        propStr(json, "language",   "de", true);
-        propStr(json, "currency",   "€",  true);
-        propStr(json, "invoice-id", invoiceId, true);
-        propOpt(json, "issuing-date",  issue,    true);
-        propOpt(json, "delivery-date", delivery, true);
-        propOpt(json, "due-date",      due,      true);
-        propStr(json, "customer-id",   customerId, true);
+        JSONObject recipientAddress = new JSONObject()
+                .put("street",      streetField.getText())
+                .put("city",        cityField.getText())
+                .put("postal-code", postalCodeField.getText());
 
-        // recipient
-        json.append("\"recipient\":{");
-        propStr(json, "name", recipientName, true);
-        json.append("\"address\":{");
-        propStr(json, "street",      streetField.getText(), true);
-        propStr(json, "city",        cityField.getText(),   true);
-        propStr(json, "postal-code", postalCodeField.getText(), false);
-        json.append("},");
-        propStr(json, "vat-id", recipientVat, false); // min. 2 Zeichen dank Fallback; wird NICHT gedruckt
-        json.append("},");
+        JSONObject recipient = new JSONObject()
+                .put("name",    recipientName)
+                .put("address", recipientAddress)
+                .put("vat-id",  recipientVat);
 
-        // biller
-        json.append("\"biller\":{");
-        propStr(json, "name", "Mein Unternehmen GmbH", true);
-        json.append("\"address\":{");
-        propStr(json, "street",      "Musterstraße 1", true);
-        propStr(json, "city",        "Musterstadt",    true);
-        propStr(json, "postal-code", "12345",          false);
-        json.append("},");
-        propStr(json, "vat-id",   billerVat, true); // wird gedruckt
-        propStr(json, "iban",     "DE44500105175407324931", true);
-        propStr(json, "bank-name","Deutsche Bank", false);
-        json.append("},");
+        JSONObject billerAddress = new JSONObject()
+                .put("street",      "Musterstraße 1")
+                .put("city",        "Musterstadt")
+                .put("postal-code", "12345");
 
-        // Sicherheit: kein Zeitpreismodus aktivieren
-        json.append("\"hourly-rate\":").append(0).append(",");
+        JSONObject biller = new JSONObject()
+                .put("name",      "Mein Unternehmen GmbH")
+                .put("address",   billerAddress)
+                .put("vat-id",    billerVatId)
+                .put("iban",      "DE44500105175407324931")
+                .put("bank-name", "Deutsche Bank");
 
-        // items & vat
-        json.append("\"items\":[").append(itemsJson).append("],");
-        json.append("\"vat\":0.19");
-        json.append("}");
+        JSONObject invoice = new JSONObject()
+                .put("language",   "de")
+                .put("currency",   "€")
+                .put("invoice-id", invoiceId)
+                
+                .put("issuing-date",  (issued    == null) ? JSONObject.NULL : issued)
+                .put("delivery-date", (delivered == null) ? JSONObject.NULL : delivered)
+                .put("due-date",      (due      == null) ? JSONObject.NULL : due)
+                .put("customer-id",   customerId)
+                .put("recipient",     recipient)
+                .put("biller",        biller)
+                .put("hourly-rate",   0)
+                .put("items",         items)
+                .put("vat",           0.19);
 
-        // --- PDF erzeugen ---
-        TypstGenerator.generateJson(json.toString());
+        // an typst weitergeben
+        TypstGenerator.generateJson(invoice.toString());
+
+
     }
 
     
-    
-
-    // ----------------- Hilfsfunktionen -----------------
-
-    /** Null-sicherer String */
-    private static String nvl(String s) { return (s == null) ? "" : s; }
-
-    /** JSON-escape für Strings */
-    private static String esc(String s) {
-        StringBuilder sb = new StringBuilder(s.length() + 16);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\\' -> sb.append("\\\\");
-                case '\"' -> sb.append("\\\"");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default   -> sb.append(c);
-            }
-        }
-        return sb.toString();
+    private static String orEmpty(String empty) {
+        return (empty == null) ? "" : empty;
     }
 
-    /** String-Property: null/leer -> als "" schreiben (nie null) */
-    private static void propStr(StringBuilder sb, String key, String value, boolean trailingComma) {
-        sb.append("\"").append(key).append("\":")
-          .append("\"").append(esc(nvl(value))).append("\"");
-        if (trailingComma) sb.append(',');
-    }
-
-    /** Optionale Property (z. B. Datum): null bleibt null, sonst String */
-    private static void propOpt(StringBuilder sb, String key, String value, boolean trailingComma) {
-        sb.append("\"").append(key).append("\":");
-        if (value == null) sb.append("null");
-        else sb.append("\"").append(esc(value)).append("\"");
-        if (trailingComma) sb.append(',');
-    }
-    
-    
-    private static String countryPrefix(String vat, String fallback) {
-        String v = nvl(vat).replaceAll("\\s+", "");
-        if (v.length() >= 2) return v.substring(0, 2);
-        return fallback;
-    }
-    
-    private static String sanitizeVat(String vatRaw, String defaultPrefix) {
-        String v = nvl(vatRaw).replaceAll("\\s+", "");
-        if (v.length() < 2) return defaultPrefix;
-        return v;
-    }
-
-    private void recalcTotals() {
+   /* private void recalcTotals() {
         for (InvoiceLine ln : leistungenTable.getItems()) {
             ln.setTotal(ln.getQuantity() * ln.getPrice());
         }
         leistungenTable.refresh();
-    }
+    }   
 
     private String generateNextInvoiceNumber() throws SQLException {
-        try (Connection c = Database.getConnection();
-             Statement s = c.createStatement();
-             ResultSet rs = s.executeQuery("SELECT MAX(id) FROM invoice")) {
-            int max = rs.next() ? rs.getInt(1) : 0;
+        try (Connection conn = db.openConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet resultSet = stmt.executeQuery("SELECT MAX(id) FROM invoice")) {
+            int max = resultSet.next() ? resultSet.getInt(1) : 0;
             return "Re" + String.format("%04d", max + 1);
         }
+    } */
+
+    private void showError(String title, Exception ex) {
+        Alert errorAlert = new Alert(Alert.AlertType.ERROR, ex.getMessage(), ButtonType.OK);
+        errorAlert.setHeaderText(title);
+        errorAlert.showAndWait();
     }
-    
-    
    
- 
+   
+
     
-    
-    
+
     
 }

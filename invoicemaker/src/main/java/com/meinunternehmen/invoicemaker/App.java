@@ -1,42 +1,47 @@
 package com.meinunternehmen.invoicemaker;
 
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.fxml.FXMLLoader;
+import javafx.application.Application;  // liefert launch,...
+import javafx.application.Platform; // für exit
+import javafx.fxml.FXMLLoader; // load()    
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.stage.Stage;
+import javafx.stage.Stage; // Fenster
 
-import java.sql.SQLException;
+import java.sql.SQLException; 
 
 public class App extends Application {
 
-    @Override
-    public void start(Stage primaryStage) throws Exception {
-        // 1) Datenbank initialisieren
-        try {
-            Database.init();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            Platform.exit();
+    @Override    
+    public void start(Stage stage) throws Exception {
+    	
+    	Database db = new Database("jdbc:sqlite:invoicemaker.db");
+    	
+     try {
+            db.initSchema();      
+        } catch (SQLException e) { 
+            e.printStackTrace();  
+            Platform.exit(); 
+            return;  
         }
+       
+        FXMLLoader fxml = new FXMLLoader(getClass().getResource("/layout.fxml")); 
+        Parent root = fxml.load();  
+        
+        LayoutController controller = fxml.getController();
+        controller.setDatabase(db);   // hier bekommt controller die DB
+        controller.loadRecipientData(); 
 
-        // 2) FXML laden
-        FXMLLoader loader = new FXMLLoader(getClass().getResource("/layout.fxml"));
-        Parent root = loader.load();
-
-        // 3) Szene und Stage
-        Scene scene = new Scene(root);
-        primaryStage.setScene(scene);
-        primaryStage.setTitle("Rechnungserzeuger");
-        primaryStage.setMinWidth(600);
-        primaryStage.setMinHeight(400);
-        primaryStage.sizeToScene();
-        primaryStage.show();
+        Scene scene = new Scene(root);          
+        stage.setScene(scene); 
+        stage.setTitle("Rechnungserzeuger");
+        stage.setMinWidth(600);
+        stage.setMinHeight(400);
+        stage.sizeToScene();
+        stage.show();    
     }
 
     public static void main(String[] args) {
-        launch(args);
+        launch(args); 
     }
 }
 

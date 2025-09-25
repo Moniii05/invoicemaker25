@@ -15,7 +15,7 @@ public class EditingCell<T> extends TableCell<InvoiceLine,T> {
         textField.setOnAction(evt -> {
             commitEdit(converter.fromString(textField.getText()));
         });
-        textField.focusedProperty().addListener((obs, wasFoc, isNowFoc) -> {
+        textField.focusedProperty().addListener((ignored, notused, isNowFoc) -> {
             if (!isNowFoc) {
                 commitEdit(converter.fromString(textField.getText()));
             }

@@ -12,11 +12,16 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Java / Compiler -->
     <java.version>17</java.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
 
+    <!-- Bibliotheksversionen zentral pflegen -->
     <javafx.version>20.0.2</javafx.version>
     <junit.version>5.11.0</junit.version>
+    <orgjson.version>20240303</orgjson.version>
+    <sqlite.jdbc.version>3.41.2.1</sqlite.jdbc.version>
   </properties>
 
   <dependencies>
@@ -32,14 +37,21 @@
       <version>${javafx.version}</version>
     </dependency>
 
-    <!-- Optional: SQLite JDBC -->
+    <!-- JSON: org.json (JSONObject, JSONArray, Escaping, etc.) -->
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>${orgjson.version}</version>
+    </dependency>
+
+    <!-- SQLite JDBC -->
     <dependency>
       <groupId>org.xerial</groupId>
       <artifactId>sqlite-jdbc</artifactId>
-      <version>3.41.2.1</version>
+      <version>${sqlite.jdbc.version}</version>
     </dependency>
 
-    <!-- Tests -->
+    <!-- Tests (JUnit 5) -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>
@@ -72,6 +84,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.2.5</version>
         <configuration>
+          <!-- Hilft bei JavaFX-Tests im Classpath-Modus -->
           <useModulePath>false</useModulePath>
         </configuration>
       </plugin>

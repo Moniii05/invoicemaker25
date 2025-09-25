@@ -12,14 +12,14 @@
 <GridPane xmlns="http://javafx.com/javafx/17.0.15"
           xmlns:fx="http://javafx.com/fxml/1"
           fx:controller="com.meinunternehmen.invoicemaker.LayoutController"
-          hgap="10" vgap="10">
+          hgap="10" vgap="10">  
 
-  <!-- Padding um das gesamte Grid -->
+  <!-- padding -->
   <padding>
     <Insets top="10" right="10" bottom="10" left="10"/>
   </padding>
 
-  <!-- 1. Kunde wählen / neu eingeben -->
+  <!-- 1. neuer kunde -->
   <Label text="Kunde:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
   <ComboBox fx:id="customerCombo" editable="true"
             promptText="bestehenden Kunden wählen"
@@ -27,12 +27,12 @@
   <Button text="Neu" onAction="#onNewCustomer"
           GridPane.rowIndex="0" GridPane.columnIndex="3"/>
 
-  <!-- 2. Kundennummer -->
+  <!-- 2. kundennummer -->
   <Label text="Kundennummer:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
   <TextField fx:id="kundenNummerField"
              GridPane.rowIndex="1" GridPane.columnIndex="1" GridPane.columnSpan="2"/>
 
-  <!-- 3. Adresse (Straße, PLZ, Stadt) -->
+  <!-- 3. adresse -->
   <Label text="Straße:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
   <TextField fx:id="streetField"
              GridPane.rowIndex="2" GridPane.columnIndex="1"/>
@@ -47,7 +47,7 @@
              prefWidth="120"
              GridPane.rowIndex="2" GridPane.columnIndex="5"/>
 
-  <!-- 4. Leistungen: dynamisch per Tabelle -->
+  <!-- 4. leistungen-->
   <Label text="Leistungen:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
   <TableView fx:id="leistungenTable"
              prefHeight="200"
@@ -62,26 +62,30 @@
   </TableView>
   <Button text="Position hinzufügen" onAction="#onAddRow"
           GridPane.rowIndex="5" GridPane.columnIndex="0"/>
+  
+<Button text="Zeile löschen" onAction="#onDeleteRow"
+        GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+     
 
-  <!-- 5. Datumspicker -->
+  <!-- 5. datum -->
   <Label text="Ausstellungsdatum:" GridPane.rowIndex="6" GridPane.columnIndex="0"/>
-  <DatePicker fx:id="dpIssue"
+  <DatePicker fx:id="DateIssued"
               GridPane.rowIndex="6" GridPane.columnIndex="1"/>
 
   <Label text="Lieferdatum:" GridPane.rowIndex="7" GridPane.columnIndex="0"/>
-  <DatePicker fx:id="dpDelivery"
+  <DatePicker fx:id="DateDelivered"
               GridPane.rowIndex="7" GridPane.columnIndex="1"/>
 
   <Label text="Zahlbar bis:" GridPane.rowIndex="8" GridPane.columnIndex="0"/>
-  <DatePicker fx:id="dpDue"
+  <DatePicker fx:id="DateDue"
               GridPane.rowIndex="8" GridPane.columnIndex="1"/>
 
-  <!-- 6. Automatisch vergebene Rechnungsnummer -->
+  <!-- 6. Rechnungsnummer -->
   <Label text="Rechnungs-Nr.:" GridPane.rowIndex="9" GridPane.columnIndex="0"/>
   <TextField fx:id="rechnungsNummerField" editable="true"
              GridPane.rowIndex="9" GridPane.columnIndex="1"/>
 
-  <!-- 7. PDF erzeugen -->
+  <!-- 7. PDF  -->
   <Button text="PDF erzeugen" onAction="#onPdfErzeugen"
           GridPane.rowIndex="10" GridPane.columnIndex="0"/>
 
