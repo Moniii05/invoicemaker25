@@ -1,4 +1,6 @@
 # invoicemaker25
+Bsp Ausgabe PDF:
+[Rechnung-Re0001-Monika.pdf](https://github.com/user-attachments/files/22731072/Rechnung-Re0001-Monika.pdf)
 
 Invoicemaker ist eine Java-Anwendung zur automatischen Rechnungserstellung.  
 Sie wurde in Eclipse entwickelt, verwendet JavaFX für die Benutzeroberfläche,  
@@ -34,4 +36,14 @@ Anstatt Rechnungen manuell zu schreiben, automatisiert Invoicemaker den Ablauf:
 Kundendaten müssen nur einmal eingegeben werden,
 alle Rechnungen sind im einheitlichen Format,
 die PDF-Ausgabe erfolgt sofort und automatisch.
+
+
+GUI:
+![EA6877D5-6531-4FA3-BD41-AEA7420D68DB](https://github.com/user-attachments/assets/3b73732c-e877-47ef-a8c5-2669b2ba25d6)
+
+Dropdown Kundenliste:
+![9E02E16F-9CC1-4DC5-9C9E-A9249EDAB135](https://github.com/user-attachments/assets/b089c55c-fd34-4138-888e-ba4fd8a03367)
+
+Kalender(eingeben oder per GUI auswählen):
+![944F2C28-07AB-4BC3-814A-A283F58883DC](https://github.com/user-attachments/assets/96975e6c-bbb8-4a06-adf6-a2e13a88b203)
 
